@@ -1143,7 +1143,9 @@ function M.setup(user_config)
   api.nvim_create_user_command('WakaTimeCliVersion', function() M.get_cli_version() end, { nargs = 0 })
 
   state.initialized = true
-  vim.notify('[WakaTime] Initialized.', vim.log.levels.INFO)
+  if state.is_debug_on then
+    vim.notify('[WakaTime] Initialized.', vim.log.levels.INFO)
+  end
 
   -- Trigger initial check in case VimEnter already fired before setup completed
   vim.defer_fn(function() init_and_handle_activity(false) end, 100)
