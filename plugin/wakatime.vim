@@ -270,7 +270,7 @@ EOF
             let py = 'python'
         endif
         let code = py . " import sys, vim;from os.path import abspath, join;sys.path.insert(0, abspath(join('" . s:plugin_root_folder . "', 'scripts')));from install_cli import main;main(home='" . s:home . "');"
-        let cmd = [v:progname, '-u', 'NONE', '-c', code, '+qall']
+        let cmd = s:GetRoundAboutInstallCmd(code)
         if s:has_async
             if !s:IsWindows()
                 let job_cmd = [&shell, &shellcmdflag, s:JoinArgs(cmd)]
@@ -304,6 +304,23 @@ EOF
                 let stdout = system(s:JoinArgs(cmd) . ' &')
             endif
         endif
+    endfunction
+
+    function! s:GetRoundAboutInstallCmd(code)
+        let vim_prog = v:progname
+
+        " Avoid spawning a second GUI instance when running from gvim/macvim.
+        if !s:IsWindows() && (has('gui_running') || v:progname =~# '^\%(g\?vimx\?\|gvim\|mvim\)$')
+            if s:Executable('vim')
+                let vim_prog = 'vim'
+            endif
+        endif
+
+        let cmd = [vim_prog]
+        if !s:IsWindows() && vim_prog ==# v:progname && (has('gui_running') || v:progname =~# '^\%(gvim\|mvim\)$')
+            let cmd = cmd + ['-v']
+        endif
+        return cmd + ['-u', 'NONE', '-c', a:code, '+qall']
     endfunction
 
 " }}}
