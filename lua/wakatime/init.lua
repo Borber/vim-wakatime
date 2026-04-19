@@ -77,6 +77,8 @@ local state = {
   is_debug_on = false,
   local_cache_expire = 10, -- seconds
   last_heartbeat = { last_activity_at = 0, last_heartbeat_at = 0, file = '' },
+  last_interaction_at = 0,
+  interaction_timeout = 120,
   heartbeats_buffer = {},
   send_buffer_seconds = 30, -- seconds
   last_sent = fn.localtime(),
@@ -113,6 +115,8 @@ local current_time_str
 local set_last_heartbeat_in_memory
 local set_last_heartbeat
 local get_last_heartbeat
+local record_interaction
+local has_recent_interaction
 local append_heartbeat
 local send_heartbeats
 local handle_activity
@@ -558,6 +562,14 @@ set_last_heartbeat = function(last_activity_at, last_heartbeat_at, file)
   end
 end
 
+record_interaction = function()
+  state.last_interaction_at = fn.localtime()
+end
+
+has_recent_interaction = function(now)
+  return state.last_interaction_at > 0 and (now - state.last_interaction_at) <= state.interaction_timeout
+end
+
 get_last_heartbeat = function()
   local now = fn.localtime()
   -- Check cache expiry
@@ -855,6 +867,8 @@ handle_activity = function(is_write)
     return
   end
 
+  if is_write then record_interaction() end
+
   -- Update line numbers for heartbeat metadata
   update_line_numbers()
 
@@ -872,7 +886,7 @@ handle_activity = function(is_write)
 
     local enough_time_passed = (now - last.last_heartbeat_at) > (state.config.heartbeat_frequency * 60)
 
-    if is_write or enough_time_passed or file ~= last.file then
+    if is_write or file ~= last.file or (enough_time_passed and has_recent_interaction(now)) then
       append_heartbeat(file, now, is_write, last)
     else
       -- No heartbeat needed, but update activity time in memory if cache expired
@@ -1111,6 +1125,11 @@ function M.setup(user_config)
     group = group,
     pattern = '*',
     callback = function() init_and_handle_activity(false) end,
+  })
+  api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI', 'InsertEnter', 'TextChanged', 'TextChangedI' }, {
+    group = group,
+    pattern = '*',
+    callback = record_interaction,
   })
   api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, {
     group = group,

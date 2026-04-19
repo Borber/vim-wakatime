@@ -59,6 +59,8 @@ let s:VERSION = '12.0.0'
     let s:is_debug_on = s:false
     let s:local_cache_expire = 10  " seconds between reading s:shared_state_file
     let s:last_heartbeat = {'last_activity_at': 0, 'last_heartbeat_at': 0, 'file': ''}
+    let s:last_interaction_at = 0
+    let s:interaction_timeout = 120
     let s:heartbeats_buffer = []
     let s:send_buffer_seconds = 30  " seconds between sending buffered heartbeats
     let s:last_sent = localtime()
@@ -786,6 +788,14 @@ EOF
         let s:last_heartbeat = {'last_activity_at': a:last_activity_at, 'last_heartbeat_at': a:last_heartbeat_at, 'file': a:file}
     endfunction
 
+    function! s:RecordInteraction()
+        let s:last_interaction_at = localtime()
+    endfunction
+
+    function! s:HasRecentInteraction(now)
+        return s:last_interaction_at > 0 && a:now - s:last_interaction_at <= s:interaction_timeout
+    endfunction
+
     function! s:n2s(number)
         " Converts an integer or float number to a string
         return substitute(printf('%d', a:number), ',', '.', '')
@@ -865,6 +875,10 @@ EOF
             return
         endif
 
+        if a:is_write
+            call s:RecordInteraction()
+        endif
+
         " Update line numbers for heartbeat metadata
         call s:UpdateLineNumbers()
 
@@ -876,7 +890,7 @@ EOF
             " Create a heartbeat when saving a file, when the current file
             " changes, and when still editing the same file but enough time
             " has passed since the last heartbeat.
-            if a:is_write || s:EnoughTimePassed(now, last) || file != last.file
+            if a:is_write || file != last.file || (s:EnoughTimePassed(now, last) && s:HasRecentInteraction(now))
                 call s:AppendHeartbeat(file, now, a:is_write, last)
             else
                 if now - s:last_heartbeat.last_activity_at > s:local_cache_expire
@@ -1182,6 +1196,7 @@ call s:Init()
 
     augroup Wakatime
         autocmd BufEnter,VimEnter * call s:InitAndHandleActivity(s:false)
+        autocmd CursorMoved,CursorMovedI,InsertEnter,TextChanged,TextChangedI * call s:RecordInteraction()
         autocmd CursorHold,CursorHoldI * call s:HandleActivity(s:false)
         autocmd BufWritePost * call s:HandleActivity(s:true)
         if exists('##QuitPre')
