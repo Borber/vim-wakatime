@@ -853,8 +853,16 @@ EOF
         call s:HandleActivity(a:is_write)
     endfunction
 
+    function! s:IsMacroExecuting()
+        return exists('*reg_executing') && !empty(reg_executing())
+    endfunction
+
     function! s:HandleActivity(is_write)
         if !s:config_file_already_setup
+            return
+        endif
+
+        if s:IsMacroExecuting()
             return
         endif
 

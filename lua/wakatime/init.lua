@@ -117,6 +117,7 @@ local append_heartbeat
 local send_heartbeats
 local handle_activity
 local init_and_handle_activity
+local is_macro_executing
 local print_msg
 local print_today
 local print_file_expert
@@ -827,10 +828,21 @@ append_heartbeat = function(file, now, is_write, last)
   end
 end
 
+is_macro_executing = function()
+  return fn.exists('*reg_executing') == 1 and fn.reg_executing() ~= ''
+end
+
 handle_activity = function(is_write)
   if not state.config_file_already_setup then
     if state.is_debug_on then
       vim.notify('[WakaTime] Skipping activity: config file not ready.', vim.log.levels.DEBUG)
+    end
+    return
+  end
+
+  if is_macro_executing() then
+    if state.is_debug_on then
+      vim.notify('[WakaTime] Skipping activity from macro execution.', vim.log.levels.DEBUG)
     end
     return
   end
