@@ -514,7 +514,8 @@ EOF
     endfunction
 
     function! s:JsonEscape(str)
-        return substitute(a:str, '"', '\\"', 'g')
+        let escaped = substitute(a:str, '\\', '\\\\', 'g')
+        return substitute(escaped, '"', '\\"', 'g')
     endfunction
 
     function! s:JoinArgs(args)
