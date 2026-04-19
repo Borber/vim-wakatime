@@ -32,6 +32,7 @@ local EXIT_CODE_API_KEY_ERROR = 104
 --- @field redraw_setting? "'auto'" | "'enabled'" | "'disabled'" # Screen redraw behavior after sending heartbeats. Defaults to 'auto'.
 --- @field api_key_vault_cmd? string # Shell command to retrieve the API key. Defaults to nil.
 --- @field plugin_name? string # Plugin name used in User Agent. Defaults to 'wakatime.nvim'.
+--- @field status_bar_enabled? boolean # Enable cached statusline text from `require('wakatime').statusline()`. Defaults to true unless disabled in ~/.wakatime.cfg.
 
 -- Module state (equivalent to s: variables)
 local state = {
@@ -52,6 +53,7 @@ local state = {
     redraw_setting = 'auto', -- 'auto', 'enabled', 'disabled'
     api_key_vault_cmd = nil,
     plugin_name = 'wakatime.nvim',
+    status_bar_enabled = true,
   },
   home = '',
   plugin_root_folder = '',
@@ -88,9 +90,16 @@ local state = {
   nvim_async_output_today = {},
   nvim_async_output_file_expert = {},
   nvim_async_output_version = {},
+  nvim_async_output_status_bar = {},
   async_callback_today = nil,
   async_callback_file_expert = nil,
   async_callback_version = nil,
+  async_callback_status_bar = nil,
+  status_bar_text = '',
+  status_bar_last_update = 0,
+  status_bar_refresh_interval = 60,
+  status_bar_refresh_in_progress = false,
+  status_bar_component_added = false,
   -- Line change tracking
   lines_in_files = {},
   human_line_changes = {},
@@ -126,6 +135,8 @@ local print_msg
 local print_today
 local print_file_expert
 local update_line_numbers
+local maybe_refresh_status_bar
+local maybe_attach_lualine_status_bar
 
 -- Helper Functions (Ported from Vimscript s: functions)
 
@@ -791,6 +802,8 @@ send_heartbeats = function()
   -- Clear line changes after sending
   state.human_line_changes = {}
 
+  maybe_refresh_status_bar(false)
+
   -- Redraw logic (less critical with async, but kept for parity)
 
   local end_time = loop.hrtime()
@@ -958,7 +971,7 @@ local function run_cli_command(args, output_buffer_key, callback_key, exit_handl
     vim.notify(fmt('[WakaTime] Cannot run command, CLI not executable: %s', state.wakatime_cli), vim.log.levels.ERROR)
     local cb = state[callback_key] or print_msg
     pcall(cb, 'Error: wakatime-cli not found or not executable.')
-    return
+    return -1
   end
 
   local cmd_args = { state.wakatime_cli }
@@ -974,7 +987,7 @@ local function run_cli_command(args, output_buffer_key, callback_key, exit_handl
     vim.notify(fmt('[WakaTime] Running command: %s', cmd_str_for_notify), vim.log.levels.DEBUG)
   end
 
-  fn.jobstart(cmd_args, {
+  local job_id = fn.jobstart(cmd_args, {
     on_stdout = function(job_id, data, event)
       if data then table.insert(state[output_buffer_key], table.concat(data)) end
     end,
@@ -1005,6 +1018,14 @@ local function run_cli_command(args, output_buffer_key, callback_key, exit_handl
     end,
     pty = false,
   })
+
+  if job_id == 0 then
+    vim.notify(fmt('[WakaTime] Failed to start command: %s', cmd_str_for_notify), vim.log.levels.ERROR)
+  elseif job_id == -1 then
+    vim.notify(fmt('[WakaTime] Invalid command arguments: %s', cmd_str_for_notify), vim.log.levels.ERROR)
+  end
+
+  return job_id
 end
 
 -- Public API Functions (callable via require('wakatime').<func>)
@@ -1012,6 +1033,98 @@ end
 function M.get_today_summary(callback)
   state.async_callback_today = callback or print_today
   run_cli_command({ '--today' }, 'nvim_async_output_today', 'async_callback_today')
+end
+
+local function update_status_bar_text(output)
+  state.status_bar_refresh_in_progress = false
+
+  local summary = strip_whitespace(output or ''):gsub('[\r\n]+', ' ')
+  state.status_bar_text = summary
+  state.status_bar_last_update = fn.localtime()
+
+  cmd('redrawstatus')
+  pcall(function()
+    local lualine = require('lualine')
+    if type(lualine.refresh) == 'function' then lualine.refresh({ scope = 'window' }) end
+  end)
+end
+
+maybe_refresh_status_bar = function(force)
+  if not state.config.status_bar_enabled then return end
+  if not executable(state.wakatime_cli) then return end
+  if state.status_bar_refresh_in_progress then return end
+
+  local now = fn.localtime()
+  if not force and state.status_bar_last_update > 0 then
+    local age = now - state.status_bar_last_update
+    if age < state.status_bar_refresh_interval then return end
+  end
+
+  state.status_bar_refresh_in_progress = true
+  state.async_callback_status_bar = update_status_bar_text
+  local job_id = run_cli_command({ '--today' }, 'nvim_async_output_status_bar', 'async_callback_status_bar')
+  if not job_id or job_id <= 0 then state.status_bar_refresh_in_progress = false end
+end
+
+local function is_wakatime_lualine_component(component)
+  if type(component) == 'table' then
+    return component.__wakatime_statusline == true
+  end
+  return false
+end
+
+local function make_lualine_component()
+  return {
+    function() return require('wakatime').statusline() end,
+    cond = function() return require('wakatime').statusline() ~= '' end,
+    __wakatime_statusline = true,
+  }
+end
+
+maybe_attach_lualine_status_bar = function(attempt)
+  if not state.config.status_bar_enabled or state.status_bar_component_added then return end
+
+  local ok, lualine = pcall(require, 'lualine')
+  if not ok or type(lualine.get_config) ~= 'function' or type(lualine.setup) ~= 'function' then
+    if attempt < 5 then vim.defer_fn(function() maybe_attach_lualine_status_bar(attempt + 1) end, 500) end
+    return
+  end
+
+  local config = lualine.get_config()
+  if type(config) ~= 'table' then
+    if attempt < 5 then vim.defer_fn(function() maybe_attach_lualine_status_bar(attempt + 1) end, 500) end
+    return
+  end
+
+  config.sections = config.sections or {}
+  config.sections.lualine_x = config.sections.lualine_x or {}
+
+  for _, component in ipairs(config.sections.lualine_x) do
+    if is_wakatime_lualine_component(component) then
+      state.status_bar_component_added = true
+      return
+    end
+  end
+
+  table.insert(config.sections.lualine_x, 1, make_lualine_component())
+  lualine.setup(config)
+  state.status_bar_component_added = true
+end
+
+function M.statusline()
+  if not state.config.status_bar_enabled then return '' end
+
+  if
+    not state.status_bar_refresh_in_progress
+    and (
+      state.status_bar_last_update == 0
+      or (fn.localtime() - state.status_bar_last_update) >= state.status_bar_refresh_interval
+    )
+  then
+    vim.schedule(function() maybe_refresh_status_bar(false) end)
+  end
+
+  return state.status_bar_text
 end
 
 function M.get_file_experts(callback)
@@ -1110,6 +1223,12 @@ function M.setup(user_config)
   if vi_redraw == 'enabled' or vi_redraw == 'auto' or vi_redraw == 'disabled' then
     state.config.redraw_setting = vi_redraw
   end
+  local status_bar_enabled = get_ini_setting('settings', 'status_bar_enabled')
+  if status_bar_enabled == 'false' then
+    state.config.status_bar_enabled = false
+  elseif status_bar_enabled == 'true' then
+    state.config.status_bar_enabled = true
+  end
   -- Apply debug from config file (will be re-checked in setup_debug_mode)
   local debug_setting = get_ini_setting('settings', 'debug')
   if debug_setting == 'true' then state.config.debug = true end
@@ -1185,6 +1304,9 @@ function M.setup(user_config)
   if state.is_debug_on then
     vim.notify('[WakaTime] Initialized.', vim.log.levels.INFO)
   end
+
+  maybe_attach_lualine_status_bar(0)
+  maybe_refresh_status_bar(true)
 
   -- Trigger initial check in case VimEnter already fired before setup completed
   vim.defer_fn(function() init_and_handle_activity(false) end, 100)

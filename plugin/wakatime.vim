@@ -29,6 +29,13 @@ let s:VERSION = '12.0.0'
     endif
     let g:loaded_wakatime = s:true
 
+    " Use the Neovim Lua implementation when available.
+    if has('nvim') && exists('*luaeval')
+        if luaeval("pcall(function() require('wakatime').setup() end)")
+            finish
+        endif
+    endif
+
     " Backup & Override cpoptions
     let s:old_cpo = &cpo
     set cpo&vim
