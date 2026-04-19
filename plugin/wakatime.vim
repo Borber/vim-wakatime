@@ -517,6 +517,16 @@ EOF
         return s:n2s(localtime())
     endfunction
 
+    function! s:HasActiveDebugSession()
+        if !has('nvim') || !exists('*luaeval')
+            return s:false
+        endif
+
+        " Guard against unrelated Lua modules named `dap` which don't expose
+        " the nvim-dap API expected below.
+        return luaeval("pcall(function() local dap = package.loaded['dap']; return type(dap) == 'table' and type(dap.session) == 'function' and dap.session() ~= nil end)")
+    endfunction
+
     function! s:AppendHeartbeat(file, now, is_write, last)
         let file = a:file
         if empty(file)
@@ -600,14 +610,8 @@ EOF
         endif
 
         " Debugging category support
-        if has('lua')
-            " check if nvim-dap is loaded
-            if luaeval("package.loaded['dap'] ~= nil")
-                " check if debugging session is active
-                if luaeval("require('dap').session() ~= nil")
-                    let cmd = cmd + ['--category', 'debugging']
-                endif
-            end
+        if s:HasActiveDebugSession()
+            let cmd = cmd + ['--category', 'debugging']
         endif
 
         " overwrite shell
