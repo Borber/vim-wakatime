@@ -442,8 +442,16 @@ setup_cli = function()
         state.wakatime_cli = 'wakatime' -- Legacy name check
         state.autoupdate_cli = false
         if state.is_debug_on then vim.notify('[WakaTime] Using legacy wakatime found in PATH', vim.log.levels.DEBUG) end
+      elseif fn.filereadable(default_path) == 1 then
+        state.wakatime_cli = default_path
+        state.autoupdate_cli = false
+        if state.is_debug_on then vim.notify('[WakaTime] Using managed wakatime-cli', vim.log.levels.DEBUG) end
+      elseif not state.is_windows and fn.filereadable('/opt/homebrew/bin/wakatime-cli') == 1 then
+        state.wakatime_cli = '/opt/homebrew/bin/wakatime-cli' -- Homebrew on Apple Silicon
+        state.autoupdate_cli = false
+        if state.is_debug_on then vim.notify('[WakaTime] Using Homebrew wakatime-cli', vim.log.levels.DEBUG) end
       elseif not state.is_windows and fn.filereadable('/usr/local/bin/wakatime-cli') == 1 then
-        state.wakatime_cli = '/usr/local/bin/wakatime-cli' -- Homebrew check
+        state.wakatime_cli = '/usr/local/bin/wakatime-cli' -- Homebrew on Intel macOS
         state.autoupdate_cli = false
         if state.is_debug_on then vim.notify('[WakaTime] Using Homebrew wakatime-cli', vim.log.levels.DEBUG) end
       else

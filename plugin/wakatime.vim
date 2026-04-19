@@ -110,23 +110,34 @@ let s:VERSION = '12.0.0'
         elseif exists("g:wakatime_OverrideCommandPrefix")
             let s:wakatime_cli = g:wakatime_OverrideCommandPrefix
 
-        " Check $PATH and ~/.wakatime/wakatime-cli symlink
+        " Check $PATH and managed ~/.wakatime/wakatime-cli
         else
             let path = s:home . '/.wakatime/wakatime-cli'
 
-            " Check for wakatime-cli
-            if !filereadable(path) && s:Executable('wakatime-cli')
+            " Prefer wakatime-cli from PATH so package managers and wrappers still work
+            if s:Executable('wakatime-cli')
                 let s:wakatime_cli = 'wakatime-cli'
 
-            " Check for wakatime
-            elseif !filereadable(path) && s:Executable('wakatime') && !s:Contains(exepath('wakatime'), 'npm') && !s:Contains(exepath('wakatime'), 'node')
+            " Check for legacy wakatime binary in PATH
+            elseif s:Executable('wakatime') && !s:Contains(exepath('wakatime'), 'npm') && !s:Contains(exepath('wakatime'), 'node')
                 let s:wakatime_cli = 'wakatime'
 
-            " Check for wakatime-cli installed via Homebrew
-            elseif !filereadable(path) && filereadable('/usr/local/bin/wakatime-cli')
+            " Prefer the managed CLI before falling back to Homebrew binaries
+            elseif filereadable(path)
+                let s:wakatime_cli = path
+                if s:IsWindows()
+                    let s:wakatime_cli = s:wakatime_cli . '.exe'
+                endif
+
+            " Check for wakatime-cli installed via Homebrew only as a last resort
+            elseif filereadable('/opt/homebrew/bin/wakatime-cli')
+                let s:wakatime_cli = '/opt/homebrew/bin/wakatime-cli'
+
+            " Check for wakatime-cli installed via Homebrew on Intel macOS
+            elseif filereadable('/usr/local/bin/wakatime-cli')
                 let s:wakatime_cli = '/usr/local/bin/wakatime-cli'
 
-            " Default to ~/.wakatime/wakatime-cli and enable auto-update
+            " Default to managed ~/.wakatime/wakatime-cli and enable auto-update
             else
                 let s:autoupdate_cli = s:true
                 let s:wakatime_cli = path
@@ -171,11 +182,7 @@ let s:VERSION = '12.0.0'
                     \ 'stoponexit': '',
                     \ 'callback': {channel, output -> s:AsyncInstallHandler(output)}})
             elseif s:nvim_async
-                if s:IsWindows()
-                    let job_cmd = cmd
-                else
-                    let job_cmd = [&shell, &shellcmdflag, s:JoinArgs(cmd)]
-                endif
+                let job_cmd = cmd
                 let s:nvim_async_output = ['']
                 let job_opts = {
                     \ 'on_stdout': function('s:NeovimAsyncInstallOutputHandler'),
@@ -281,11 +288,7 @@ EOF
             endif
             let job = job_start(job_cmd, {'stoponexit': ''})
         elseif s:nvim_async
-            if s:IsWindows()
-                let job_cmd = cmd
-            else
-                let job_cmd = [&shell, &shellcmdflag, s:JoinArgs(cmd)]
-            endif
+            let job_cmd = cmd
             let job_opts = {}
             if !s:IsWindows()
                 let job_opts['detach'] = 1
@@ -653,11 +656,7 @@ EOF
                 call ch_sendraw(channel, extra_heartbeats . "\n")
             endif
         elseif s:nvim_async
-            if s:IsWindows()
-                let job_cmd = cmd
-            else
-                let job_cmd = [&shell, &shellcmdflag, s:JoinArgs(cmd)]
-            endif
+            let job_cmd = cmd
             let s:nvim_async_output = ['']
             let job_opts = {
                 \ 'on_stdout': function('s:NeovimAsyncOutputHandler'),
@@ -917,11 +916,7 @@ EOF
                 \ 'stoponexit': '',
                 \ 'callback': {channel, output -> s:AsyncTodayHandler(output, cmd)}})
         elseif s:nvim_async
-            if s:IsWindows()
-                let job_cmd = cmd
-            else
-                let job_cmd = [&shell, &shellcmdflag, s:JoinArgs(cmd)]
-            endif
+            let job_cmd = cmd
             let job_opts = {
                 \ 'on_stdout': function('s:NeovimAsyncTodayOutputHandler'),
                 \ 'on_stderr': function('s:NeovimAsyncTodayOutputHandler'),
@@ -960,11 +955,7 @@ EOF
                 \ 'stoponexit': '',
                 \ 'callback': {channel, output -> s:AsyncFileExpertHandler(output, cmd)}})
         elseif s:nvim_async
-            if s:IsWindows()
-                let job_cmd = cmd
-            else
-                let job_cmd = [&shell, &shellcmdflag, s:JoinArgs(cmd)]
-            endif
+            let job_cmd = cmd
             let job_opts = {
                 \ 'on_stdout': function('s:NeovimAsyncFileExpertOutputHandler'),
                 \ 'on_stderr': function('s:NeovimAsyncFileExpertOutputHandler'),
@@ -1007,11 +998,7 @@ EOF
                 \ 'stoponexit': '',
                 \ 'callback': {channel, output -> s:AsyncVersionHandler(output, cmd)}})
         elseif s:nvim_async
-            if s:IsWindows()
-                let job_cmd = cmd
-            else
-                let job_cmd = [&shell, &shellcmdflag, s:JoinArgs(cmd)]
-            endif
+            let job_cmd = cmd
             let job_opts = {
                 \ 'on_stdout': function('s:NeovimAsyncVersionOutputHandler'),
                 \ 'on_stderr': function('s:NeovimAsyncVersionOutputHandler'),
