@@ -955,6 +955,13 @@ local function set_debug_mode(enable)
   vim.notify(fmt('[WakaTime] Debug mode %s.', enable and 'enabled' or 'disabled'), vim.log.levels.INFO)
 end
 
+local function set_status_bar(enable)
+  local val = enable and 'true' or 'false'
+  set_ini_setting('settings', 'status_bar_enabled', val)
+  state.config.status_bar_enabled = enable
+  vim.notify(fmt('[WakaTime] Status bar %s.', enable and 'enabled' or 'disabled'), vim.log.levels.INFO)
+end
+
 local function set_redraw_setting(setting)
   if setting == 'enabled' or setting == 'disabled' or setting == 'auto' then
     set_ini_setting('settings', 'vi_redraw', setting)
@@ -1280,6 +1287,8 @@ function M.setup(user_config)
   api.nvim_create_user_command('WakaTimeApiKey', prompt_for_api_key, { nargs = 0 })
   api.nvim_create_user_command('WakaTimeDebugEnable', function() set_debug_mode(true) end, { nargs = 0 })
   api.nvim_create_user_command('WakaTimeDebugDisable', function() set_debug_mode(false) end, { nargs = 0 })
+  api.nvim_create_user_command('WakaTimeStatusBarEnable', function() set_status_bar(true) end, { nargs = 0 })
+  api.nvim_create_user_command('WakaTimeStatusBarDisable', function() set_status_bar(false) end, { nargs = 0 })
   api.nvim_create_user_command(
     'WakaTimeScreenRedrawDisable',
     function() set_redraw_setting('disabled') end,

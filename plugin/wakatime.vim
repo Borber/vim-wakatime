@@ -848,6 +848,14 @@ EOF
         let s:is_debug_on = s:false
     endfunction
 
+    function! s:EnableStatusBar()
+        call s:SetIniSetting('settings', 'status_bar_enabled', 'true')
+    endfunction
+
+    function! s:DisableStatusBar()
+        call s:SetIniSetting('settings', 'status_bar_enabled', 'false')
+    endfunction
+
     function! s:EnableScreenRedraw()
         call s:SetIniSetting('settings', 'vi_redraw', 'enabled')
         let s:redraw_setting = 'enabled'
@@ -1220,6 +1228,8 @@ call s:Init()
     :command -nargs=0 WakaTimeApiKey call s:PromptForApiKey()
     :command -nargs=0 WakaTimeDebugEnable call s:EnableDebugMode()
     :command -nargs=0 WakaTimeDebugDisable call s:DisableDebugMode()
+    :command -nargs=0 WakaTimeStatusBarEnable call s:EnableStatusBar()
+    :command -nargs=0 WakaTimeStatusBarDisable call s:DisableStatusBar()
     :command -nargs=0 WakaTimeScreenRedrawDisable call s:DisableScreenRedraw()
     :command -nargs=0 WakaTimeScreenRedrawEnable call s:EnableScreenRedraw()
     :command -nargs=0 WakaTimeScreenRedrawEnableAuto call s:EnableScreenRedrawAuto()
