@@ -996,10 +996,10 @@ local function run_cli_command(args, output_buffer_key, callback_key, exit_handl
 
   local job_id = fn.jobstart(cmd_args, {
     on_stdout = function(job_id, data, event)
-      if data then table.insert(state[output_buffer_key], table.concat(data)) end
+      if data then table.insert(state[output_buffer_key], table.concat(data, '\n')) end
     end,
     on_stderr = function(job_id, data, event)
-      if data then table.insert(state[output_buffer_key], table.concat(data)) end -- Mix stderr for simplicity
+      if data then table.insert(state[output_buffer_key], table.concat(data, '\n')) end -- Mix stderr for simplicity
     end,
     on_exit = function(job_id, exit_code, event)
       local output = strip_whitespace(table.concat(state[output_buffer_key], '\n'))
