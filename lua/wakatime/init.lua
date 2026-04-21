@@ -1223,7 +1223,7 @@ function M.setup(user_config)
   -- Define paths based on home dir
   state.config_file = state.home .. '/.wakatime.cfg'
   state.shared_state_parent_dir = state.home .. '/.wakatime'
-  state.shared_state_file = state.shared_state_parent_dir .. '/nvim_shared_state' -- Use different state file than Vim
+  state.shared_state_file = state.shared_state_parent_dir .. '/vim_shared_state'
 
   -- Apply settings from config file if they exist (e.g., vi_redraw)
   local vi_redraw = get_ini_setting('settings', 'vi_redraw')
