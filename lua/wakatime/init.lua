@@ -1121,16 +1121,6 @@ end
 function M.statusline()
   if not state.config.status_bar_enabled then return '' end
 
-  if
-    not state.status_bar_refresh_in_progress
-    and (
-      state.status_bar_last_update == 0
-      or (fn.localtime() - state.status_bar_last_update) >= state.status_bar_refresh_interval
-    )
-  then
-    vim.schedule(function() maybe_refresh_status_bar(false) end)
-  end
-
   return state.status_bar_text
 end
 
@@ -1315,7 +1305,6 @@ function M.setup(user_config)
   end
 
   maybe_attach_lualine_status_bar(0)
-  maybe_refresh_status_bar(true)
 
   -- Trigger initial check in case VimEnter already fired before setup completed
   vim.defer_fn(function() init_and_handle_activity(false) end, 100)
