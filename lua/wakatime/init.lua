@@ -659,6 +659,11 @@ local function get_heartbeats_json()
   return '[' .. table.concat(arr, ',') .. ']'
 end
 
+local function has_active_debug_session()
+  local dap = package.loaded['dap']
+  return type(dap) == 'table' and type(dap.session) == 'function' and dap.session() ~= nil
+end
+
 local function neovim_async_output_handler(job_id, data, event)
   -- Collect output for potential debugging or error reporting
   if data then table.insert(state.nvim_async_output, table.concat(data, '\n')) end
@@ -755,9 +760,7 @@ send_heartbeats = function()
   --   table.insert(cmd_args, '--category')
   --   table.insert(cmd_args, 'debugging')
   -- end
-  -- Or check dap status if available:
-  local dap_ok, dap = pcall(require, 'dap')
-  if dap_ok and dap.session() then
+  if has_active_debug_session() then
     table.insert(cmd_args, '--category')
     table.insert(cmd_args, 'debugging')
   end
