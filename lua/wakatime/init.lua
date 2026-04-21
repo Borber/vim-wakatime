@@ -575,6 +575,7 @@ end
 
 record_interaction = function()
   state.last_interaction_at = fn.localtime()
+  if state.initialized and state.config_file_already_setup then maybe_refresh_status_bar(false) end
 end
 
 has_recent_interaction = function(now)
