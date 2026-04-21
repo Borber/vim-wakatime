@@ -617,11 +617,8 @@ get_last_heartbeat = function()
 end
 
 local function order_time(time_str, loop_count)
-  -- Add microsecond precision based on loop count to ensure order
-  if not time_str:find('%.') then time_str = time_str .. '.0' end
-  -- Pad loop count to 6 digits for microseconds
-  local micro = string.format('%06d', loop_count)
-  return time_str .. micro
+  if not time_str:find('%.', 1, true) then return string.format('%s.%06d', time_str, loop_count) end
+  return time_str
 end
 
 local function get_heartbeats_json()
