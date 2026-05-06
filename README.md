@@ -59,6 +59,17 @@ To disable the lualine status bar item:
 { 'wakatime/vim-wakatime', lazy = false, opts = { status_bar_enabled = false } }
 ```
 
+To disable wakatime-cli AI transcript parsing while sending Vim heartbeats:
+```lua
+{ 'wakatime/vim-wakatime', lazy = false, opts = { sync_ai_disabled = true } }
+```
+
+Or add this to `$WAKATIME_HOME/.wakatime.cfg`:
+```ini
+[settings]
+sync_ai_disabled = true
+```
+
 
 ## Troubleshooting
 

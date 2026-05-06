@@ -95,6 +95,8 @@ Available options:
 - `redraw_setting` (string): "auto", "enabled", or "disabled".
 - `api_key_vault_cmd` (string): Shell command to retrieve API key.
 - `plugin_name` (string): Plugin name for User Agent.
+- `sync_ai_disabled` (boolean): Pass `--sync-ai-disabled` to wakatime-cli
+  when sending heartbeats. Defaults to false.
 
 ==============================================================================
 

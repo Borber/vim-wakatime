@@ -33,6 +33,7 @@ local EXIT_CODE_API_KEY_ERROR = 104
 --- @field api_key_vault_cmd? string # Shell command to retrieve the API key. Defaults to nil.
 --- @field plugin_name? string # Plugin name used in User Agent. Defaults to 'wakatime.nvim'.
 --- @field status_bar_enabled? boolean # Enable cached statusline text from `require('wakatime').statusline()`. Defaults to true unless disabled in ~/.wakatime.cfg.
+--- @field sync_ai_disabled? boolean # Disable wakatime-cli AI transcript parsing when sending heartbeats. Defaults to false.
 
 -- Module state (equivalent to s: variables)
 local state = {
@@ -54,6 +55,7 @@ local state = {
     api_key_vault_cmd = nil,
     plugin_name = 'wakatime.nvim',
     status_bar_enabled = true,
+    sync_ai_disabled = false,
   },
   home = '',
   plugin_root_folder = '',
@@ -785,6 +787,7 @@ send_heartbeats = function()
     table.insert(cmd_args, '--human-line-changes')
     table.insert(cmd_args, tostring(heartbeat.human_line_changes))
   end
+  if state.config.sync_ai_disabled then table.insert(cmd_args, '--sync-ai-disabled') end
   if extra_heartbeats_json ~= '' then table.insert(cmd_args, '--extra-heartbeats') end
 
   -- Debugging category support (Example using a hypothetical global flag)
@@ -1268,6 +1271,14 @@ function M.setup(user_config)
       state.config.status_bar_enabled = false
     elseif status_bar_enabled == 'true' then
       state.config.status_bar_enabled = true
+    end
+  end
+  if user_config.sync_ai_disabled == nil then
+    local sync_ai_disabled = get_ini_setting('settings', 'sync_ai_disabled')
+    if sync_ai_disabled == 'false' then
+      state.config.sync_ai_disabled = false
+    elseif sync_ai_disabled == 'true' then
+      state.config.sync_ai_disabled = true
     end
   end
   -- Apply debug from config file (will be re-checked in setup_debug_mode)

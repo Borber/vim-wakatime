@@ -108,6 +108,13 @@ let s:VERSION = '12.0.0'
         " Buffering heartbeats disabled in Windows, unless have async support
         let s:buffering_heartbeats_enabled = s:has_async || s:nvim_async || !s:IsWindows()
 
+        let s:sync_ai_disabled = s:false
+        if exists("g:wakatime_SyncAIDisabled")
+            let s:sync_ai_disabled = g:wakatime_SyncAIDisabled ? s:true : s:false
+        elseif s:GetIniSetting('settings', 'sync_ai_disabled') == 'true'
+            let s:sync_ai_disabled = s:true
+        endif
+
         " Turn on autoupdate only when using default ~/.wakatime/wakatime-cli
         let s:autoupdate_cli = s:false
 
@@ -678,6 +685,9 @@ EOF
         endif
         if has_key(heartbeat, 'human_line_changes')
             let cmd = cmd + ['--human-line-changes', string(heartbeat.human_line_changes)]
+        endif
+        if s:sync_ai_disabled
+            let cmd = cmd + ['--sync-ai-disabled']
         endif
         if !empty(extra_heartbeats)
             let cmd = cmd + ['--extra-heartbeats']
