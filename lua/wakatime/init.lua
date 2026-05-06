@@ -137,6 +137,10 @@ local is_macro_executing
 local print_msg
 local print_today
 local print_file_expert
+local add_message_history
+local show_error_message
+local build_cli_error_message
+local build_cli_start_error_message
 local update_line_numbers
 local maybe_refresh_status_bar
 local maybe_attach_lualine_status_bar
@@ -708,25 +712,26 @@ local function neovim_async_exit_handler(job_id, exit_code, event, cmd_args_str)
   state.nvim_async_output = {} -- Clear buffer
 
   local is_error = false
-  local error_msg = output
+  local error_detail = output
 
   if exit_code == EXIT_CODE_API_KEY_ERROR then
-    error_msg = error_msg .. (error_msg ~= '' and '\n' or '') .. 'Invalid API Key. Use :WakaTimeApiKey'
+    error_detail = error_detail .. (error_detail ~= '' and '\n' or '') .. 'Invalid API Key. Use :WakaTimeApiKey'
     is_error = true
     -- Potentially disable future heartbeats until key is fixed?
     state.config_file_already_setup = false -- Force re-check on next event
   elseif exit_code == EXIT_CODE_CONFIG_PARSE_ERROR then
-    error_msg = error_msg .. (error_msg ~= '' and '\n' or '') .. 'Error parsing config file: ' .. state.config_file
+    error_detail = error_detail .. (error_detail ~= '' and '\n' or '') .. 'Error parsing config file: ' .. state.config_file
     is_error = true
   elseif exit_code ~= 0 then
-    error_msg = error_msg .. (error_msg ~= '' and '\n' or '') .. fmt('CLI exited with code %d', exit_code)
     is_error = true
   end
 
-  if is_error or (state.is_debug_on and output ~= '') then
-    local level = is_error and vim.log.levels.ERROR or vim.log.levels.DEBUG
+  if is_error then
     local cmd_str = cmd_args_str or join_args(state.last_sent_cmd or {}) -- Use saved command if available
-    vim.notify(fmt('[WakaTime] Command: %s\nOutput (Exit Code %d):\n%s', cmd_str, exit_code, error_msg), level)
+    show_error_message(build_cli_error_message(cmd_str, exit_code, error_detail))
+  elseif state.is_debug_on and output ~= '' then
+    local cmd_str = cmd_args_str or join_args(state.last_sent_cmd or {}) -- Use saved command if available
+    vim.notify(fmt('[WakaTime] Command: %s\nOutput (Exit Code %d):\n%s', cmd_str, exit_code, output), vim.log.levels.DEBUG)
   end
 end
 
@@ -825,14 +830,11 @@ send_heartbeats = function()
     if extra_heartbeats_json ~= '' then fn.chansend(job_id, extra_heartbeats_json .. '\n') end
     fn.chanclose(job_id, 'stdin') -- Close stdin after sending data
   elseif job_id == 0 then
-    vim.notify('[WakaTime] Failed to start wakatime-cli job (job_id=0).', vim.log.levels.ERROR)
+    show_error_message(build_cli_start_error_message(join_args(cmd_args), 'jobstart returned 0'))
   elseif job_id == -1 then
-    vim.notify('[WakaTime] Failed to start wakatime-cli job (invalid arguments).', vim.log.levels.ERROR)
+    show_error_message(build_cli_start_error_message(join_args(cmd_args), 'invalid command arguments'))
   else
-    vim.notify(
-      fmt('[WakaTime] Failed to start wakatime-cli job (unknown error: %s).', tostring(job_id)),
-      vim.log.levels.ERROR
-    )
+    show_error_message(build_cli_start_error_message(join_args(cmd_args), fmt('unknown jobstart error: %s', tostring(job_id))))
   end
 
   state.last_sent = now
@@ -1010,12 +1012,53 @@ local function set_redraw_setting(setting)
   end
 end
 
+add_message_history = function(message, hl_group)
+  local chunks = { { message, hl_group or 'None' } }
+  local emit = function()
+    local ok = pcall(api.nvim_echo, chunks, true, {})
+    if not ok then pcall(api.nvim_echo, chunks, true) end
+  end
+
+  if type(vim.in_fast_event) == 'function' and vim.in_fast_event() then
+    vim.schedule(emit)
+  else
+    emit()
+  end
+end
+
+show_error_message = function(message)
+  vim.notify(message, vim.log.levels.ERROR)
+  add_message_history(message, 'ErrorMsg')
+end
+
+build_cli_error_message = function(cmd_str, exit_code, output)
+  local message = fmt('[WakaTime] Command failed (Exit Code %d)', exit_code)
+  if exit_code == EXIT_CODE_API_KEY_ERROR then message = message .. ': Invalid API Key' end
+
+  message = message .. '\nCommand: ' .. cmd_str
+  if output and output ~= '' then
+    message = message .. '\nOutput:\n' .. output
+  else
+    message = message .. '\nOutput: <empty>'
+  end
+
+  return message
+end
+
+build_cli_start_error_message = function(cmd_str, reason)
+  return fmt('[WakaTime] Failed to start command: %s\nReason: %s', cmd_str, reason)
+end
+
 -- Generic Async Command Runner
 local function run_cli_command(args, output_buffer_key, callback_key, exit_handler)
   if not executable(state.wakatime_cli) then
-    vim.notify(fmt('[WakaTime] Cannot run command, CLI not executable: %s', state.wakatime_cli), vim.log.levels.ERROR)
+    local message = fmt(
+      '[WakaTime] Cannot run command, CLI not executable: %s',
+      state.wakatime_cli and state.wakatime_cli ~= '' and state.wakatime_cli or '<empty>'
+    )
+    show_error_message(message)
     local cb = state[callback_key] or print_msg
-    pcall(cb, 'Error: wakatime-cli not found or not executable.')
+    pcall(cb, message)
     return -1
   end
 
@@ -1044,13 +1087,8 @@ local function run_cli_command(args, output_buffer_key, callback_key, exit_handl
       state[output_buffer_key] = {} -- Clear buffer after use
 
       if exit_code ~= 0 then
-        local err_msg = fmt('Command failed (Exit Code %d)', exit_code)
-        if exit_code == EXIT_CODE_API_KEY_ERROR then err_msg = err_msg .. ': Invalid API Key' end
-        output = output .. (output ~= '' and '\n' or '') .. err_msg
-        vim.notify(
-          fmt('[WakaTime] %s\nCommand: %s\nOutput:\n%s', err_msg, cmd_str_for_notify, output),
-          vim.log.levels.ERROR
-        )
+        output = build_cli_error_message(cmd_str_for_notify, exit_code, output)
+        show_error_message(output)
       elseif state.is_debug_on then
         vim.notify(
           fmt('[WakaTime] Command finished: %s\nOutput:\n%s', cmd_str_for_notify, output),
@@ -1065,9 +1103,15 @@ local function run_cli_command(args, output_buffer_key, callback_key, exit_handl
   })
 
   if job_id == 0 then
-    vim.notify(fmt('[WakaTime] Failed to start command: %s', cmd_str_for_notify), vim.log.levels.ERROR)
+    local message = build_cli_start_error_message(cmd_str_for_notify, 'jobstart returned 0')
+    show_error_message(message)
+    local cb = state[callback_key] or print_msg
+    pcall(cb, message)
   elseif job_id == -1 then
-    vim.notify(fmt('[WakaTime] Invalid command arguments: %s', cmd_str_for_notify), vim.log.levels.ERROR)
+    local message = build_cli_start_error_message(cmd_str_for_notify, 'invalid command arguments')
+    show_error_message(message)
+    local cb = state[callback_key] or print_msg
+    pcall(cb, message)
   end
 
   return job_id
