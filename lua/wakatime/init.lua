@@ -117,6 +117,7 @@ local setup_debug_mode
 local setup_config_file
 local setup_cli
 local install_cli
+local is_ignored
 local get_current_file
 local sanitize_arg
 local join_args
@@ -506,6 +507,27 @@ setup_cli = function()
   end
 end
 
+is_ignored = function(file)
+  if not file or file == '' then return false end
+  if type(state.config.ignore) ~= 'table' then return false end
+
+  for _, pattern in ipairs(state.config.ignore) do
+    if type(pattern) == 'string' and pattern ~= '' then
+      local ok, matched = pcall(function() return file:match(pattern) ~= nil end)
+      if ok and matched then
+        if state.is_debug_on then
+          vim.notify(fmt('[WakaTime] Ignoring file matching pattern %s: %s', pattern, file), vim.log.levels.DEBUG)
+        end
+        return true
+      elseif not ok and state.is_debug_on then
+        vim.notify(fmt('[WakaTime] Invalid ignore pattern %s', pattern), vim.log.levels.WARN)
+      end
+    end
+  end
+
+  return false
+end
+
 get_current_file = function()
   if vim.bo.buftype ~= '' then return '' end
 
@@ -517,6 +539,7 @@ get_current_file = function()
 
   local stat = loop.fs_stat(file)
   if not stat or stat.type ~= 'file' then return '' end
+  if is_ignored(file) then return '' end
 
   return file
 end

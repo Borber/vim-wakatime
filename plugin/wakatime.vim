@@ -510,6 +510,33 @@ EOF
         return python_bin
     endfunction
 
+    function! s:GetIgnorePatterns()
+        let patterns = []
+        let in_ignore = s:false
+        for line in s:default_configs
+            if line =~# '^\s*ignore\s*='
+                let in_ignore = s:true
+                continue
+            endif
+            if in_ignore
+                let pattern = s:StripWhitespace(line)
+                if !empty(pattern)
+                    let patterns = patterns + [pattern]
+                endif
+            endif
+        endfor
+        return patterns
+    endfunction
+
+    function! s:IsIgnored(file)
+        for pattern in s:GetIgnorePatterns()
+            if a:file =~# pattern
+                return s:true
+            endif
+        endfor
+        return s:false
+    endfunction
+
     function! s:GetCurrentFile()
         if &buftype != ''
             return ''
@@ -521,6 +548,10 @@ EOF
         endif
 
         if getftype(file) !=# 'file'
+            return ''
+        endif
+
+        if s:IsIgnored(file)
             return ''
         endif
 
