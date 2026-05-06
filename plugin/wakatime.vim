@@ -511,7 +511,20 @@ EOF
     endfunction
 
     function! s:GetCurrentFile()
-        return expand("%:p")
+        if &buftype != ''
+            return ''
+        endif
+
+        let file = expand('%:p')
+        if empty(file)
+            return ''
+        endif
+
+        if getftype(file) !=# 'file'
+            return ''
+        endif
+
+        return file
     endfunction
 
     function! s:SanitizeArg(arg)

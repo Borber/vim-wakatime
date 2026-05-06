@@ -507,7 +507,18 @@ setup_cli = function()
 end
 
 get_current_file = function()
-  return fn.expand('%:p') -- Get full path of the current buffer
+  if vim.bo.buftype ~= '' then return '' end
+
+  local name = api.nvim_buf_get_name(0)
+  if not name or name == '' then return '' end
+
+  local file = fn.fnamemodify(name, ':p')
+  if file == '' then return '' end
+
+  local stat = loop.fs_stat(file)
+  if not stat or stat.type ~= 'file' then return '' end
+
+  return file
 end
 
 sanitize_arg = function(arg)
